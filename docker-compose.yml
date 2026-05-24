@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
@@ -26,9 +24,9 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-storeuser}:${POSTGRES_PASSWORD:-storepass}@db:5432/${POSTGRES_DB:-taobao_store}
       TAOBAO_API_KEY: ${TAOBAO_API_KEY}
-      TAOBAO_API_HOST: ${TAOBAO_API_HOST:-taobao-api.p.rapidapi.com}
+      TAOBAO_API_HOST: ${TAOBAO_API_HOST:-taobao-datahub.p.rapidapi.com}
     ports:
-      - "3000:3000"
+      - "3001:3000"
     volumes:
       - .:/app
       - /app/node_modules
