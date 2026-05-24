@@ -4,13 +4,10 @@ const https = require('https');
 const HOST = process.env.TAOBAO_API_HOST || 'taobao-datahub.p.rapidapi.com';
 const KEY  = process.env.TAOBAO_API_KEY;
 
-// Bypass corporate self-signed cert for outbound API calls
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-
 const client = axios.create({
   baseURL: `https://${HOST}`,
-  httpsAgent,
-  timeout: 6000,
+  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+  timeout: 8000,
   headers: {
     'x-rapidapi-key':  KEY,
     'x-rapidapi-host': HOST,
@@ -18,12 +15,17 @@ const client = axios.create({
 });
 
 async function searchProducts(keyword, page = 1) {
-  const { data } = await client.get('/item_search', {
-    params: { q: keyword, page },
-  });
+  const { data } = await client.get('/item_search', { params: { q: keyword, page } });
+
+  // Check API-level error
+  const status = data?.result?.status;
+  if (status?.data === 'error') {
+    throw new Error(`API error ${status.code}: ${JSON.stringify(status.msg)}`);
+  }
+
   const result = data?.result?.result || data?.result || {};
-  const items = result.items || result.resultList || result.itemsArray || [];
-  console.log(`[Taobao] search "${keyword}" -> ${items.length} items`);
+  const items  = result.items || result.resultList || result.itemsArray || [];
+  console.log(`[Taobao] "${keyword}" p${page} → ${items.length} items`);
   return items;
 }
 
