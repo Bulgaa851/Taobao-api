@@ -11,7 +11,7 @@ async function translateToMongolian(text) {
         langpair: 'zh|mn',
         de: process.env.USER_EMAIL || 'store@example.com',
       },
-      timeout: 5000,
+      timeout: 4000,
     });
     const translated = res.data?.responseData?.translatedText;
     return translated || text;

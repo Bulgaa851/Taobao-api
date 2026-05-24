@@ -118,7 +118,10 @@ async function searchTaobao(keyword) {
       body: JSON.stringify({ keyword, page: state.page }),
     });
     const data = await res.json();
-    showStatus(`${data.saved} бүтээгдэхүүн татаж Монгол руу орчуулав`, 'text-green-600');
+    const msg = data.mock
+      ? `⚠️ Жишиг өгөгдөл: ${data.saved} бүтээгдэхүүн (сүлжээний хязгаарлалт)`
+      : `✓ ${data.saved} бүтээгдэхүүн татаж Монгол руу орчуулав`;
+    showStatus(msg, data.mock ? 'text-yellow-600' : 'text-green-600');
     state.page = 1;
     await loadProducts();
   } catch (err) {

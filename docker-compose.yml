@@ -11,25 +11,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./server/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
     ports:
-      - "5432:5432"
-
-  app:
-    build: .
-    container_name: taobao_store_app
-    restart: unless-stopped
-    depends_on:
-      - db
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DATABASE_URL: postgres://${POSTGRES_USER:-storeuser}:${POSTGRES_PASSWORD:-storepass}@db:5432/${POSTGRES_DB:-taobao_store}
-      TAOBAO_API_KEY: ${TAOBAO_API_KEY}
-      TAOBAO_API_HOST: ${TAOBAO_API_HOST:-taobao-datahub.p.rapidapi.com}
-    ports:
-      - "3001:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
+      - "5433:5432"
 
 volumes:
   postgres_data:

@@ -1,10 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
-const { searchProducts, getProductDetail, normalizeProduct } = require('../services/taobao');
+const { searchProducts, normalizeProduct } = require('../services/taobao');
 const { translateProduct } = require('../services/translator');
+const { getMockProducts } = require('../services/mockData');
 
-// GET /api/products — list saved products
+// GET /api/products — list from DB (with mock seed if empty)
 router.get('/', async (req, res) => {
   try {
     const { category, search, page = 1, limit = 20 } = req.query;
@@ -34,22 +35,40 @@ router.get('/', async (req, res) => {
   }
 });
 
-// POST /api/products/search — fetch from Taobao, translate, save
+// POST /api/products/search — fetch from Taobao, save; fallback to mock if API unreachable
 router.post('/search', async (req, res) => {
   try {
     const { keyword, page = 1 } = req.body;
     if (!keyword) return res.status(400).json({ error: 'keyword шаардлагатай' });
 
-    const rawItems = await searchProducts(keyword, page);
-    if (!rawItems.length) {
-      return res.json({ saved: 0, products: [], message: 'Taobao-оос үр дүн олдсонгүй' });
+    let rawItems = [];
+    let usedMock = false;
+
+    try {
+      rawItems = await searchProducts(keyword, page);
+    } catch (apiErr) {
+      console.warn('[Taobao] API error:', apiErr.message);
     }
 
-    const normalized = rawItems.map(normalizeProduct).filter(p => p.taobao_id);
+    // Use mock when API returned nothing — show all sample products
+    if (!rawItems.length) {
+      console.warn('[Taobao] No results from API, falling back to mock data');
+      rawItems = getMockProducts(keyword);
+      if (!rawItems.length) rawItems = getMockProducts(''); // all mock products
+      usedMock = true;
+    }
+
+    if (!rawItems.length) {
+      return res.json({ saved: 0, products: [], message: 'Үр дүн олдсонгүй' });
+    }
+
+    const normalized = usedMock
+      ? rawItems  // mock data is already normalized+translated
+      : rawItems.map(normalizeProduct).filter(p => p.taobao_id);
 
     const saved = [];
     for (const item of normalized) {
-      const translated = await translateProduct(item);
+      const product = usedMock ? item : await translateProduct(item);
       const { rows } = await db.query(
         `INSERT INTO products
           (taobao_id, title_original, title_mn, description_mn, price, currency,
@@ -57,29 +76,31 @@ router.post('/search', async (req, res) => {
            sold_count, rating, attributes, is_translated)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
          ON CONFLICT (taobao_id) DO UPDATE SET
-           title_mn    = EXCLUDED.title_mn,
-           price       = EXCLUDED.price,
-           sold_count  = EXCLUDED.sold_count,
-           updated_at  = NOW()
+           title_mn   = EXCLUDED.title_mn,
+           price      = EXCLUDED.price,
+           sold_count = EXCLUDED.sold_count,
+           updated_at = NOW()
          RETURNING *`,
         [
-          translated.taobao_id,   translated.title_original, translated.title_mn,
-          translated.description_mn, translated.price,       translated.currency,
-          translated.image_url,   JSON.stringify(translated.images),
-          translated.category,    translated.shop_name,      translated.shop_url,
-          translated.product_url, translated.sold_count,     translated.rating,
-          JSON.stringify(translated.attributes), translated.is_translated,
+          product.taobao_id,    product.title_original, product.title_mn,
+          product.description_mn || '', product.price, product.currency,
+          product.image_url,    JSON.stringify(product.images || []),
+          product.category,     product.shop_name,      product.shop_url,
+          product.product_url,  product.sold_count,     product.rating,
+          JSON.stringify(product.attributes || {}), product.is_translated,
         ]
       );
       saved.push(rows[0]);
     }
 
-    await db.query(
-      'INSERT INTO search_history (query, result_count) VALUES ($1, $2)',
-      [keyword, saved.length]
-    );
+    await db.query('INSERT INTO search_history (query, result_count) VALUES ($1, $2)', [keyword, saved.length]);
 
-    res.json({ saved: saved.length, products: saved });
+    res.json({
+      saved: saved.length,
+      products: saved,
+      mock: usedMock,
+      message: usedMock ? '⚠️ Сүлжээний хязгаарлалтаас болж жишиг өгөгдөл ашиглав' : null,
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
